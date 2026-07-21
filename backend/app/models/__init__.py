@@ -58,5 +58,10 @@ from app.models.setup_wizard import SetupSession, SetupItem
 
 from app.models.ai_gateway import GuildAIProvider, GuildAIModuleSetting, GuildAIUsage, GuildAIRequestLog
 
-from app.models.plugins import PluginEvent, PluginRegistry
+from app.models.plugins import (
+    PluginEvent,
+    PluginMarketplaceItem,
+    PluginMarketplaceVersion,
+    PluginRegistry,
+)
 from app.models.settings import ModuleSetting

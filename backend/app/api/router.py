@@ -54,6 +54,7 @@ from app.api.routes.ai_gateway import router as ai_gateway_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.plugins import router as plugins_router
 from app.api.routes.plugin_events import router as plugin_events_router
+from app.api.routes.plugin_marketplace import router as plugin_marketplace_router
 
 api_router = APIRouter()
 
@@ -109,6 +110,7 @@ api_router.include_router(setup_wizard_router)
 api_router.include_router(ai_gateway_router)
 api_router.include_router(plugins_router)
 api_router.include_router(plugin_events_router)
+api_router.include_router(plugin_marketplace_router)
 api_router.include_router(settings_router)
 api_router.include_router(moderation_router)
 api_router.include_router(events_router)
