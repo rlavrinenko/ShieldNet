@@ -47,3 +47,12 @@ class PluginRuntimeResponse(BaseModel):
     loaded: bool
     version: str
     error: str | None = None
+
+
+class PluginHealthResponse(BaseModel):
+    total: int
+    enabled: int
+    healthy: int
+    unhealthy: int
+    loaded: int
+    runtime_errors: int
