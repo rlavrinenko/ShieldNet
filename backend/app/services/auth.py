@@ -1,0 +1,152 @@
+from datetime import UTC, datetime, timedelta
+
+from fastapi import HTTPException, status
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    generate_refresh_token,
+    hash_refresh_token,
+    verify_password,
+)
+from app.models.core import LoginAttempt, Session, User, UserStatus
+from app.schemas.auth import TokenPair
+
+
+class AuthService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def login(
+        self,
+        identity: str,
+        password: str,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> TokenPair:
+        normalized = identity.strip().lower()
+
+        result = await self.session.execute(
+            select(User)
+            .options(selectinload(User.roles))
+            .where(
+                or_(
+                    User.email == normalized,
+                    User.login == normalized,
+                )
+            )
+        )
+        user = result.scalar_one_or_none()
+
+        valid = (
+            user is not None
+            and user.password_hash is not None
+            and verify_password(password, user.password_hash)
+        )
+
+        self.session.add(
+            LoginAttempt(
+                email=normalized if "@" in normalized else None,
+                user_id=user.id if user else None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                successful=valid,
+                failure_reason=None if valid else "invalid_credentials",
+            )
+        )
+
+        if not valid:
+            await self.session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid login or password",
+            )
+
+        if user.status != UserStatus.ACTIVE:
+            await self.session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is not active",
+            )
+
+        user.last_login_at = datetime.now(UTC)
+        tokens = await self._issue_tokens(user, ip_address, user_agent)
+        await self.session.commit()
+        return tokens
+
+    async def refresh(
+        self,
+        refresh_token: str,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> TokenPair:
+        token_hash = hash_refresh_token(refresh_token)
+        now = datetime.now(UTC)
+
+        result = await self.session.execute(
+            select(Session)
+            .options(selectinload(Session.user).selectinload(User.roles))
+            .where(
+                Session.token_hash == token_hash,
+                Session.revoked_at.is_(None),
+                Session.expires_at > now,
+            )
+        )
+        stored = result.scalar_one_or_none()
+
+        if stored is None or stored.user.status != UserStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+
+        stored.revoked_at = now
+        tokens = await self._issue_tokens(
+            stored.user,
+            ip_address,
+            user_agent,
+        )
+        await self.session.commit()
+        return tokens
+
+    async def logout(self, refresh_token: str) -> None:
+        token_hash = hash_refresh_token(refresh_token)
+
+        result = await self.session.execute(
+            select(Session).where(Session.token_hash == token_hash)
+        )
+        stored = result.scalar_one_or_none()
+
+        if stored is not None and stored.revoked_at is None:
+            stored.revoked_at = datetime.now(UTC)
+            await self.session.commit()
+
+    async def _issue_tokens(
+        self,
+        user: User,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> TokenPair:
+        roles = [role.role.value for role in user.roles]
+        access_token = create_access_token(str(user.id), roles)
+        refresh_token = generate_refresh_token()
+
+        self.session.add(
+            Session(
+                user_id=user.id,
+                token_hash=hash_refresh_token(refresh_token),
+                ip_address=ip_address,
+                user_agent=user_agent,
+                expires_at=datetime.now(UTC)
+                + timedelta(days=settings.refresh_token_days),
+            )
+        )
+
+        return TokenPair(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.access_token_minutes * 60,
+        )

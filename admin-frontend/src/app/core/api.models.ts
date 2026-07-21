@@ -1,0 +1,31 @@
+export interface TokenPair {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  login: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  discord_user_id: string | null;
+  status: string;
+  email_verified: boolean;
+  roles: string[];
+  highest_role?: string | null;
+  is_superadmin?: boolean;
+}
+
+export interface GuildAccess {
+  guild_id: string;
+  name: string;
+  icon_url: string | null;
+  owner_discord_id: string;
+  member_count: number;
+  guild_status: string;
+  bot_status: string;
+  access_role: string;
+}

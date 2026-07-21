@@ -1,0 +1,26 @@
+[Unit]
+Description=ShieldNet Scheduler
+After=network-online.target shieldnet-backend.service
+Wants=network-online.target
+Requires=shieldnet-backend.service
+
+[Service]
+Type=simple
+User=shieldnet-scheduler
+Group=shieldnet-scheduler
+WorkingDirectory=/opt/shieldnet/scheduler
+EnvironmentFile=/etc/shieldnet/scheduler/scheduler.env
+ExecStart=/opt/shieldnet/scheduler/venv/bin/python -m scheduler.main
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/shieldnet/scheduler
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

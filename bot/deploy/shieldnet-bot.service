@@ -1,0 +1,29 @@
+[Unit]
+Description=ShieldNet Discord Bot Worker
+After=network-online.target shieldnet-backend.service
+Wants=network-online.target
+Requires=shieldnet-backend.service
+
+[Service]
+Type=simple
+User=shieldnet-bot
+Group=shieldnet-bot
+WorkingDirectory=/opt/shieldnet/bot
+EnvironmentFile=/etc/shieldnet/bot/bot.env
+ExecStart=/opt/shieldnet/bot/venv/bin/python -m bot.main
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/shieldnet/bot
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
