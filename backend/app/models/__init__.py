@@ -62,6 +62,9 @@ from app.models.plugins import (
     PluginEvent,
     PluginMarketplaceItem,
     PluginMarketplaceVersion,
+    PluginInstallJob,
+    PluginInstallLog,
+    PluginInstalledVersion,
     PluginRegistry,
 )
 from app.models.settings import ModuleSetting
