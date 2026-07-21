@@ -39,6 +39,14 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # SHIELDNET_ALEMBIC_VERSION_COLUMN_AUTOFIX_START
+        # Ensure descriptive ShieldNet revision IDs fit in Alembic's version table.
+        connection.exec_driver_sql(
+            "ALTER TABLE IF EXISTS system.alembic_version "
+            "ALTER COLUMN version_num TYPE VARCHAR(128)"
+        )
+        # SHIELDNET_ALEMBIC_VERSION_COLUMN_AUTOFIX_END
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
