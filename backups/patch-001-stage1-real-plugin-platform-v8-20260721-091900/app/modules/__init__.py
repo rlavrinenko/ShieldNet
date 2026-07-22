@@ -1,1 +1,0 @@
-"""ShieldNet modules namespace."""

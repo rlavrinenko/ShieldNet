@@ -1,7 +1,0 @@
--rw-r----- 640 shieldnet-api:shieldnet-api /opt/shieldnet/backend/app/api/dependencies/internal.py
-User=shieldnet-api
-Group=shieldnet-api
-User=shieldnet-bot
-Group=shieldnet-bot
-User=shieldnet-scheduler
-Group=shieldnet-scheduler

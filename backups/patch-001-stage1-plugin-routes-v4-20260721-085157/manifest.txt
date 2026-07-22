@@ -1,4 +1,0 @@
-existing app/api/router.py
-existing app/api/routes/plugins.py
-existing app/api/routes/plugin_events.py
-existing app/schemas/plugins.py
