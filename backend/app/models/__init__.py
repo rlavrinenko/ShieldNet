@@ -70,3 +70,5 @@ from app.models.plugins import (
     PluginRegistry,
 )
 from app.models.settings import ModuleSetting
+
+from app.models.plugin_control import PluginPermission, PluginPermissionGrant, PluginPermissionAudit, PluginSecret, PluginSecretAudit, PluginActivationState, PluginActivationHistory, PluginPackageHistory
