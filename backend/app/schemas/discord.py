@@ -4,5 +4,11 @@ class GuildRegisterRequest(BaseModel):
     owner_discord_id:int=Field(gt=0); member_count:int=Field(default=0,ge=0); preferred_language:str='uk'
 class GuildLeftRequest(BaseModel): guild_id:int=Field(gt=0)
 class GuildAccessResponse(BaseModel):
-    guild_id:int; name:str; icon_url:str|None; owner_discord_id:int; member_count:int
-    guild_status:str; bot_status:str; access_role:str
+    guild_id: str
+    name: str
+    icon_url: str | None
+    owner_discord_id: str
+    member_count: int
+    guild_status: str
+    bot_status: str
+    access_role: str

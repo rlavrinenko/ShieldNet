@@ -19,7 +19,9 @@ interface QuickAction {
   imports: [ShellComponent, RouterLink],
   template: `
     <sn-shell [title]="guild()?.name || 'Server'">
-      @if (guild(); as item) {
+      @if (error()) {
+        <div class="error card">{{ error() }}</div>
+      } @else if (guild(); as item) {
         <div class="page-actions">
           <div>
             <h2>Server management</h2>
@@ -56,7 +58,6 @@ interface QuickAction {
           @if (savingKey()) { <div class="muted">Saving changes…</div> }
         </div>
 
-        @if (error()) { <div class="error card">{{ error() }}</div> }
         @if (loading()) {
           <div class="loading card">Loading modules…</div>
         } @else {
@@ -84,7 +85,11 @@ interface QuickAction {
             }
           </div>
         }
-      } @else { <div class="card loading">Loading server…</div> }
+      } @else if (loading()) {
+        <div class="card loading">Loading server…</div>
+      } @else {
+        <div class="error card">Server was not found or access was revoked.</div>
+      }
     </sn-shell>
   `,
   styles: [`
