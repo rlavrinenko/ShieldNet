@@ -172,3 +172,54 @@ class PluginInstalledVersion(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+
+class PluginRuntimeState(Base):
+    __tablename__ = "runtime_state"
+    __table_args__ = (
+        UniqueConstraint("plugin_key", name="uq_plugins_runtime_state_plugin_key"),
+        {"schema": "plugins"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    plugin_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    prepared_version: Mapped[str | None] = mapped_column(String(40))
+    package_path: Mapped[str | None] = mapped_column(String(500))
+    manifest_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+    state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="empty", server_default="empty"
+    )
+    last_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class PluginRuntimeEvent(Base):
+    __tablename__ = "runtime_events"
+    __table_args__ = (
+        {"schema": "plugins"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    plugin_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("plugins.install_jobs.id", ondelete="SET NULL"),
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
