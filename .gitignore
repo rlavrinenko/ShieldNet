@@ -14,3 +14,19 @@ logs/
 *.sqlite3
 uploads/
 backups/
+
+# Python
+*.py[cod]
+.pytest_cache/
+
+# Node
+npm-debug.log*
+.angular/cache/
+
+# Builds
+admin-frontend/dist/
+
+# Local data
+tmp/
+*.bak
+*.backup-*
