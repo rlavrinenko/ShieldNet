@@ -4,38 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections import Counter
 from pathlib import Path
-from typing import Any, Iterator
-
-
-def iter_routes(router: Any, visited: set[int] | None = None) -> Iterator[Any]:
-    """Recursively flatten FastAPI/Starlette routes, including _IncludeRouter."""
-
-    if visited is None:
-        visited = set()
-
-    router_id = id(router)
-    if router_id in visited:
-        return
-
-    visited.add(router_id)
-
-    for route in getattr(router, "routes", []) or []:
-        path = getattr(route, "path", None)
-
-        if path is not None:
-            yield route
-            continue
-
-        nested_router = getattr(route, "router", None)
-        if nested_router is not None:
-            yield from iter_routes(nested_router, visited)
-            continue
-
-        nested_routes = getattr(route, "routes", None)
-        if nested_routes is not None:
-            yield from iter_routes(route, visited)
 
 
 def main() -> int:
@@ -59,67 +28,61 @@ def main() -> int:
     sys.path.insert(0, str(backend))
 
     try:
-        from app.api.router import api_router
+        from app.main import app
+        schema = app.openapi()
     except Exception as exc:
-        print(
-            f"ERROR: cannot import app.api.router: {exc!r}",
-            file=sys.stderr,
-        )
+        print(f"ERROR: cannot generate OpenAPI schema: {exc!r}", file=sys.stderr)
         return 3
 
-    signatures: list[tuple[str, str]] = []
-
-    for route in iter_routes(api_router):
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None) or {""}
-
-        if not path:
-            continue
-
-        for method in methods:
-            method_name = str(method).upper()
-
-            if method_name in {"HEAD", "OPTIONS"}:
-                continue
-
-            signatures.append((method_name, str(path)))
-
-    counts = Counter(signatures)
-    duplicates = sorted(
-        signature
-        for signature, count in counts.items()
-        if count > 1
-    )
-
-    if duplicates:
-        print("ERROR: duplicate API routes detected:")
-
-        for method, path in duplicates:
-            print(f"  {method:7} {path} x{counts[(method, path)]}")
-
-        return 4
+    paths = schema.get("paths", {})
 
     required = {
-        "/platform/plugins",
-        "/platform/plugin-events",
-        "/platform/plugin-events/summary",
-        "/platform/plugins/runtime",
+        "/api/v1/platform/plugins",
+        "/api/v1/platform/plugins/runtime",
+        "/api/v1/platform/plugin-events",
+        "/api/v1/platform/plugin-events/summary",
     }
 
-    registered_paths = {path for _, path in signatures}
-    missing = sorted(required - registered_paths)
+    missing = sorted(required - set(paths))
 
     if missing:
         print("ERROR: required plugin routes are missing:")
-
         for path in missing:
             print(f"  {path}")
+        return 4
 
+    operations = 0
+    operation_ids: list[str] = []
+
+    for path_data in paths.values():
+        for method, operation in path_data.items():
+            if method.lower() not in {
+                "get", "post", "put", "patch", "delete",
+                "options", "head", "trace",
+            }:
+                continue
+
+            operations += 1
+
+            operation_id = operation.get("operationId")
+            if operation_id:
+                operation_ids.append(operation_id)
+
+    duplicate_ids = sorted({
+        operation_id
+        for operation_id in operation_ids
+        if operation_ids.count(operation_id) > 1
+    })
+
+    if duplicate_ids:
+        print("ERROR: duplicate OpenAPI operation IDs detected:")
+        for operation_id in duplicate_ids:
+            print(f"  {operation_id}")
         return 5
 
     print(
-        f"OK: {len(signatures)} method/path registrations; "
-        "no duplicates."
+        f"OK: OpenAPI generated successfully: "
+        f"{len(paths)} paths, {operations} operations."
     )
 
     for path in sorted(required):
