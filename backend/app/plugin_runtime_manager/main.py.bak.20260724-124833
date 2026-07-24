@@ -12,10 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionFactory, close_database
-from app.models.plugins import (
-    GuildPluginInstallation,
-    PluginRuntimeInstance,
-)
+from app.models.plugins import PluginRuntimeInstance
 
 logger = logging.getLogger("shieldnet.plugin_runtime.manager")
 
@@ -207,23 +204,6 @@ class PluginRuntimeManager:
             row.updated_at = now
             row.last_error = error[:8000]
 
-            installation = (
-                await session.execute(
-                    select(GuildPluginInstallation).where(
-                        GuildPluginInstallation.guild_id
-                        == instance.guild_id,
-                        GuildPluginInstallation.plugin_key
-                        == instance.plugin_key,
-                    )
-                )
-            ).scalar_one_or_none()
-
-            if installation is not None:
-                installation.status = "error"
-                installation.last_error = error[:8000]
-                installation.last_health_check_at = now
-                installation.updated_at = now
-
             await session.commit()
 
     async def heartbeat(
@@ -246,30 +226,10 @@ class PluginRuntimeManager:
             if row is None:
                 return
 
-            installation = (
-                await session.execute(
-                    select(GuildPluginInstallation).where(
-                        GuildPluginInstallation.guild_id
-                        == instance.guild_id,
-                        GuildPluginInstallation.plugin_key
-                        == instance.plugin_key,
-                    )
-                )
-            ).scalar_one_or_none()
-
             now = datetime.now(timezone.utc)
-
             row.last_heartbeat_at = now
             row.updated_at = now
             row.last_error = None
-
-            if installation is not None:
-                installation.last_health_check_at = now
-                installation.last_error = None
-                installation.updated_at = now
-
-                if installation.enabled:
-                    installation.status = "enabled"
 
             await session.commit()
 
