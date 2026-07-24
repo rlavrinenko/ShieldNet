@@ -16,10 +16,6 @@ from app.models.plugins import (
     GuildPluginInstallation,
     PluginRuntimeInstance,
 )
-from app.plugin_runtime_manager.sandbox import (
-    SandboxLimits,
-    apply_sandbox,
-)
 
 logger = logging.getLogger("shieldnet.plugin_runtime.manager")
 
@@ -55,7 +51,6 @@ class PluginRuntimeManager:
         ] = {}
 
         self.python_executable = Path(sys.executable)
-        self.sandbox_limits = SandboxLimits.from_env()
 
     async def list_instances(
         self,
@@ -128,35 +123,15 @@ class PluginRuntimeManager:
             instance.generation,
         )
 
-        plugin_environment = {
-            "PATH": os.getenv(
-                "PLUGIN_RUNTIME_PATH",
-                "/usr/local/bin:/usr/bin:/bin",
-            ),
-            "LANG": os.getenv("LANG", "C.UTF-8"),
-            "LC_ALL": os.getenv("LC_ALL", "C.UTF-8"),
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPATH": str(
-                Path(__file__).resolve().parents[2]
-            ),
-            "HOME": instance.package_path,
-            "TMPDIR": "/tmp",
-            "SHIELDNET_PLUGIN_KEY": instance.plugin_key,
-            "SHIELDNET_GUILD_ID": str(instance.guild_id),
-            "SHIELDNET_PLUGIN_GENERATION": str(
-                instance.generation
-            ),
-        }
-
-        limits = self.sandbox_limits
-
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=instance.package_path,
-            env=plugin_environment,
-            start_new_session=True,
-            preexec_fn=lambda: apply_sandbox(limits),
+            env={
+                **os.environ,
+                "PYTHONUNBUFFERED": "1",
+                "SHIELDNET_PLUGIN_KEY": instance.plugin_key,
+                "SHIELDNET_GUILD_ID": str(instance.guild_id),
+            },
         )
 
         return ManagedProcess(
@@ -430,14 +405,9 @@ class PluginRuntimeManager:
     async def run(self) -> None:
         logger.info(
             "ShieldNet Plugin Runtime Manager started "
-            "poll=%ss heartbeat=%ss "
-            "memory=%sMB cpu=%ss files=%s processes=%s",
+            "poll=%ss heartbeat=%ss",
             self.poll_seconds,
             self.heartbeat_seconds,
-            self.sandbox_limits.memory_mb,
-            self.sandbox_limits.cpu_seconds,
-            self.sandbox_limits.open_files,
-            self.sandbox_limits.processes,
         )
 
         try:
