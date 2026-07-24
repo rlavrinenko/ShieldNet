@@ -252,25 +252,3 @@ class GuildPluginInstallation(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-
-class PluginRuntimeInstance(Base):
-    __tablename__ = "runtime_instances"
-    __table_args__ = (
-        UniqueConstraint("guild_id","plugin_key",name="uq_plugins_runtime_instance"),
-        {"schema":"plugins"},
-    )
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    guild_id: Mapped[int] = mapped_column(BigInteger,nullable=False)
-    plugin_key: Mapped[str] = mapped_column(String(96),nullable=False)
-    state: Mapped[str] = mapped_column(String(24),nullable=False,default="stopped",server_default="stopped")
-    generation: Mapped[int] = mapped_column(Integer,nullable=False,default=1,server_default="1")
-    package_version: Mapped[str | None] = mapped_column(String(40))
-    package_path: Mapped[str | None] = mapped_column(String(500))
-    manifest_json: Mapped[dict[str, Any]] = mapped_column(JSONB,nullable=False,default=dict,server_default="{}")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_error: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
