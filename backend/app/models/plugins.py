@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,6 +64,14 @@ class PluginMarketplaceItem(Base):
     homepage_url: Mapped[str | None] = mapped_column(String(500))
     repository_url: Mapped[str | None] = mapped_column(String(500))
     icon_url: Mapped[str | None] = mapped_column(String(500))
+    version: Mapped[str | None] = mapped_column(String(40))
+    min_core_version: Mapped[str | None] = mapped_column(String(40))
+    package_url: Mapped[str | None] = mapped_column(String(500))
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    signature: Mapped[str | None] = mapped_column(Text)
+    release_notes: Mapped[str | None] = mapped_column(Text)
+    manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft", server_default="draft")
     verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     downloads: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
@@ -223,3 +231,24 @@ class PluginRuntimeEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+class GuildPluginInstallation(Base):
+    __tablename__ = "guild_installations"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "plugin_key", name="uq_plugins_guild_installation"),
+        {"schema": "plugins"},
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    plugin_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="installed", server_default="installed")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    installed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_health_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

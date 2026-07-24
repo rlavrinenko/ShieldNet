@@ -57,6 +57,7 @@ from app.api.routes.plugin_events import router as plugin_events_router
 from app.api.routes.plugin_marketplace import router as plugin_marketplace_router
 from app.api.routes.plugin_jobs import router as plugin_jobs_router
 from app.api.routes.plugin_control import router as plugin_control_router
+from app.api.routes.guild_plugins import router as guild_plugins_router
 
 api_router = APIRouter()
 
@@ -115,6 +116,7 @@ api_router.include_router(plugin_events_router)
 api_router.include_router(plugin_marketplace_router)
 api_router.include_router(plugin_jobs_router)
 api_router.include_router(plugin_control_router)
+api_router.include_router(guild_plugins_router)
 api_router.include_router(settings_router)
 api_router.include_router(moderation_router)
 api_router.include_router(events_router)
