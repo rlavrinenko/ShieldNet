@@ -20,9 +20,6 @@ from app.plugin_runtime_manager.sandbox import (
     SandboxLimits,
     apply_sandbox,
 )
-from app.plugin_sdk.runtime_tokens import (
-    create_runtime_token,
-)
 
 logger = logging.getLogger("shieldnet.plugin_runtime.manager")
 
@@ -150,19 +147,7 @@ class PluginRuntimeManager:
             instance.generation,
         )
 
-        runtime_token = create_runtime_token(
-            plugin_key=instance.plugin_key,
-            guild_id=instance.guild_id,
-            generation=instance.generation,
-            permissions=frozenset(raw_permissions),
-        )
-
         plugin_environment = {
-            "SHIELDNET_RUNTIME_TOKEN": runtime_token,
-            "SHIELDNET_BACKEND_URL": os.getenv(
-                "PLUGIN_RUNTIME_BACKEND_URL",
-                "http://127.0.0.1:8000/api/v1",
-            ),
             "PATH": os.getenv(
                 "PLUGIN_RUNTIME_PATH",
                 "/usr/local/bin:/usr/bin:/bin",

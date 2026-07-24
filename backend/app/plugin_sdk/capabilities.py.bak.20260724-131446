@@ -64,8 +64,6 @@ class PluginContext:
     package_path: Path
     generation: int
     permissions: frozenset[str]
-    runtime_token: str
-    backend_url: str
 
     def has(
         self,
@@ -140,8 +138,6 @@ class PluginContext:
             "package_path": str(self.package_path),
             "generation": self.generation,
             "permissions": sorted(self.permissions),
-            "backend_url": self.backend_url,
-            "runtime_token_present": bool(self.runtime_token),
         }
 
 

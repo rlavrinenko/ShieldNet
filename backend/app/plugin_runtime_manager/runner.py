@@ -5,6 +5,7 @@ import asyncio
 import importlib.util
 import inspect
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -114,7 +115,25 @@ async def run_plugin(args: argparse.Namespace) -> None:
         package_path=package_path,
         generation=args.generation,
         permissions=requested_permissions,
+        runtime_token=os.environ.get(
+            "SHIELDNET_RUNTIME_TOKEN",
+            "",
+        ),
+        backend_url=os.environ.get(
+            "SHIELDNET_BACKEND_URL",
+            "",
+        ).rstrip("/"),
     )
+
+    if not context.runtime_token:
+        raise RuntimeError(
+            "SHIELDNET_RUNTIME_TOKEN is missing"
+        )
+
+    if not context.backend_url:
+        raise RuntimeError(
+            "SHIELDNET_BACKEND_URL is missing"
+        )
 
     logger.info(
         "Loading plugin plugin_key=%s guild_id=%s package=%s",
