@@ -11,11 +11,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from app.plugin_sdk import (
-    ALL_CAPABILITIES,
-    PluginContext,
-)
-
 logger = logging.getLogger("shieldnet.plugin_runtime.runner")
 
 
@@ -92,29 +87,12 @@ def load_plugin(
 async def run_plugin(args: argparse.Namespace) -> None:
     package_path = Path(args.package_path).resolve()
 
-    requested_permissions = frozenset(
-        permission.strip()
-        for permission in args.permission
-        if permission.strip()
-    )
-
-    unknown_permissions = sorted(
-        requested_permissions - ALL_CAPABILITIES
-    )
-
-    if unknown_permissions:
-        raise RuntimeError(
-            "Plugin received unknown capabilities: "
-            + ", ".join(unknown_permissions)
-        )
-
-    context = PluginContext(
-        guild_id=args.guild_id,
-        plugin_key=args.plugin_key,
-        package_path=package_path,
-        generation=args.generation,
-        permissions=requested_permissions,
-    )
+    context: dict[str, Any] = {
+        "guild_id": args.guild_id,
+        "plugin_key": args.plugin_key,
+        "package_path": str(package_path),
+        "entrypoint": args.entrypoint,
+    }
 
     logger.info(
         "Loading plugin plugin_key=%s guild_id=%s package=%s",
@@ -190,13 +168,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--plugin-key", required=True)
     parser.add_argument("--package-path", required=True)
     parser.add_argument("--entrypoint", required=True)
-    parser.add_argument("--generation", type=int, required=True)
-    parser.add_argument(
-        "--permission",
-        action="append",
-        default=[],
-        help="Capability granted to the plugin",
-    )
 
     return parser.parse_args()
 

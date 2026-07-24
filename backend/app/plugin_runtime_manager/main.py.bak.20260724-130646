@@ -107,17 +107,6 @@ class PluginRuntimeManager:
 
         entrypoint = self.resolve_entrypoint(instance)
 
-        manifest = instance.manifest_json or {}
-        raw_permissions = manifest.get("permissions", [])
-
-        if not isinstance(raw_permissions, list) or any(
-            not isinstance(permission, str)
-            for permission in raw_permissions
-        ):
-            raise RuntimeError(
-                "Plugin manifest permissions must be a string list"
-            )
-
         command = [
             str(self.python_executable),
             "-m",
@@ -130,15 +119,7 @@ class PluginRuntimeManager:
             instance.package_path,
             "--entrypoint",
             entrypoint,
-            "--generation",
-            str(instance.generation),
         ]
-
-        for permission in sorted(set(raw_permissions)):
-            command.extend([
-                "--permission",
-                permission,
-            ])
 
         logger.info(
             "Starting plugin plugin_key=%s guild_id=%s generation=%s",
