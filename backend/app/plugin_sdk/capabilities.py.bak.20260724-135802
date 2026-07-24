@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
@@ -66,12 +66,6 @@ class PluginContext:
     permissions: frozenset[str]
     runtime_token: str
     backend_url: str
-    _backend_client: Any = field(
-        default=None,
-        init=False,
-        repr=False,
-        compare=False,
-    )
 
     def has(
         self,
@@ -142,24 +136,14 @@ class PluginContext:
     @property
     def backend(self):
         """
-        Return one cached SDK client for the plugin process.
-        The client keeps the rotated Runtime Token in memory.
+        Create a ShieldNet Backend SDK client bound to this
+        plugin, guild, generation and Runtime Token.
         """
         from app.plugin_sdk.backend_client import (
             PluginBackendClient,
         )
 
-        client = self._backend_client
-
-        if client is None:
-            client = PluginBackendClient(context=self)
-            object.__setattr__(
-                self,
-                "_backend_client",
-                client,
-            )
-
-        return client
+        return PluginBackendClient(context=self)
 
     def public_info(self) -> dict[str, Any]:
         return {

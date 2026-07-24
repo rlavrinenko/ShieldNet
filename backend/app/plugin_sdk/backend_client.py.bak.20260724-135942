@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import json as jsonlib
-from datetime import UTC, datetime
 from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 import httpx
-import jwt
 
 from app.plugin_sdk.capabilities import (
     Capability,
@@ -17,7 +14,7 @@ from app.plugin_sdk.capabilities import (
 
 
 class PluginBackendError(RuntimeError):
-    pass
+    """Base error raised by the ShieldNet Plugin Backend SDK."""
 
 
 class PluginBackendAuthenticationError(PluginBackendError):
@@ -68,7 +65,6 @@ class PluginBackendClient:
         context: PluginContext,
         timeout_seconds: float = 15.0,
         max_response_bytes: int = 2 * 1024 * 1024,
-        refresh_before_seconds: int = 60,
     ) -> None:
         if timeout_seconds <= 0 or timeout_seconds > 120:
             raise ValueError(
@@ -80,12 +76,8 @@ class PluginBackendClient:
                 "max_response_bytes must be at least 1024"
             )
 
-        if refresh_before_seconds < 10:
-            raise ValueError(
-                "refresh_before_seconds must be at least 10"
-            )
-
         backend_url = context.backend_url.rstrip("/")
+
         parsed = urlsplit(backend_url)
 
         if parsed.scheme not in {"http", "https"}:
@@ -102,14 +94,6 @@ class PluginBackendClient:
         self._backend_url = backend_url
         self._timeout = httpx.Timeout(timeout_seconds)
         self._max_response_bytes = max_response_bytes
-        self._refresh_before_seconds = refresh_before_seconds
-
-        self._runtime_token = context.runtime_token
-        self._token_expires_at = self._read_token_expiry(
-            self._runtime_token
-        )
-
-        self._refresh_lock = asyncio.Lock()
 
     @property
     def plugin_key(self) -> str:
@@ -118,48 +102,6 @@ class PluginBackendClient:
     @property
     def guild_id(self) -> int:
         return self._context.guild_id
-
-    @property
-    def token_expires_at(self) -> datetime:
-        return self._token_expires_at
-
-    @staticmethod
-    def _read_token_expiry(token: str) -> datetime:
-        try:
-            payload = jwt.decode(
-                token,
-                options={
-                    "verify_signature": False,
-                    "verify_exp": False,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                },
-                algorithms=["HS256", "HS384", "HS512"],
-            )
-        except Exception as exc:
-            raise PluginBackendAuthenticationError(
-                "Unable to read Runtime Token metadata"
-            ) from exc
-
-        expires_at = payload.get("exp")
-
-        if not isinstance(expires_at, (int, float)):
-            raise PluginBackendAuthenticationError(
-                "Runtime Token has no valid expiration"
-            )
-
-        return datetime.fromtimestamp(
-            expires_at,
-            tz=UTC,
-        )
-
-    def _token_needs_refresh(self) -> bool:
-        remaining = (
-            self._token_expires_at
-            - datetime.now(UTC)
-        ).total_seconds()
-
-        return remaining <= self._refresh_before_seconds
 
     def _validate_path(self, path: str) -> str:
         if not isinstance(path, str) or not path:
@@ -177,7 +119,9 @@ class PluginBackendClient:
                 "Backend API path must start with '/'"
             )
 
-        if ".." in parsed.path.split("/"):
+        path_segments = parsed.path.split("/")
+
+        if ".." in path_segments:
             raise ValueError(
                 "Parent path traversal is not allowed"
             )
@@ -193,25 +137,9 @@ class PluginBackendClient:
         return path
 
     @staticmethod
-    def _decode_json(content: bytes) -> Any:
-        if not content:
-            return None
-
-        try:
-            return jsonlib.loads(
-                content.decode("utf-8")
-            )
-        except (
-            UnicodeDecodeError,
-            jsonlib.JSONDecodeError,
-        ) as exc:
-            raise PluginBackendResponseError(
-                "ShieldNet Backend returned invalid JSON",
-                status_code=0,
-            ) from exc
-
-    @staticmethod
-    def _safe_error_detail(content: bytes) -> str:
+    def _safe_error_detail(
+        content: bytes,
+    ) -> str:
         if not content:
             return "ShieldNet Backend rejected the request"
 
@@ -236,19 +164,24 @@ class PluginBackendClient:
 
         return "ShieldNet Backend rejected the request"
 
-    async def _send(
+    async def request(
         self,
         method: str,
         path: str,
         *,
-        token: str,
+        capability: Capability | str | None = None,
         json: Any = None,
         params: Mapping[str, Any] | None = None,
     ) -> PluginBackendResponse:
         safe_path = self._validate_path(path)
 
+        if capability is not None:
+            self._context.require(capability)
+
         headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": (
+                f"Bearer {self._context.runtime_token}"
+            ),
             "Accept": "application/json",
             "User-Agent": (
                 f"ShieldNet-Plugin/{self.plugin_key}"
@@ -287,13 +220,6 @@ class PluginBackendClient:
                             )
 
                     content = bytes(body)
-                    response_status = response.status_code
-                    request_id = response.headers.get(
-                        "X-Request-ID"
-                    )
-                    retry_after_header = response.headers.get(
-                        "Retry-After"
-                    )
 
         except httpx.TimeoutException as exc:
             raise PluginBackendUnavailableError(
@@ -304,22 +230,25 @@ class PluginBackendClient:
                 "ShieldNet Backend is unavailable"
             ) from exc
 
-        if response_status == 401:
+        request_id = response.headers.get("X-Request-ID")
+
+        if response.status_code == 401:
             raise PluginBackendAuthenticationError(
                 self._safe_error_detail(content)
             )
 
-        if response_status == 403:
+        if response.status_code == 403:
             raise PluginBackendPermissionError(
                 self._safe_error_detail(content)
             )
 
-        if response_status == 429:
+        if response.status_code == 429:
             retry_after: float | None = None
+            raw_retry_after = response.headers.get("Retry-After")
 
-            if retry_after_header:
+            if raw_retry_after:
                 try:
-                    retry_after = float(retry_after_header)
+                    retry_after = float(raw_retry_after)
                 except ValueError:
                     retry_after = None
 
@@ -328,105 +257,37 @@ class PluginBackendClient:
                 retry_after=retry_after,
             )
 
-        if response_status >= 500:
+        if response.status_code >= 500:
             raise PluginBackendUnavailableError(
                 "ShieldNet Backend returned a server error"
             )
 
-        if response_status >= 400:
+        if response.status_code >= 400:
             raise PluginBackendResponseError(
                 self._safe_error_detail(content),
-                status_code=response_status,
+                status_code=response.status_code,
             )
 
-        data = self._decode_json(content)
+        if not content:
+            data: Any = None
+        else:
+            try:
+                data = jsonlib.loads(
+                    content.decode("utf-8")
+                )
+            except (
+                UnicodeDecodeError,
+                jsonlib.JSONDecodeError,
+            ) as exc:
+                raise PluginBackendResponseError(
+                    "ShieldNet Backend returned invalid JSON",
+                    status_code=response.status_code,
+                ) from exc
 
         return PluginBackendResponse(
-            status_code=response_status,
+            status_code=response.status_code,
             data=data,
             request_id=request_id,
-        )
-
-    async def refresh_runtime_token(
-        self,
-        *,
-        force: bool = False,
-    ) -> datetime:
-        async with self._refresh_lock:
-            if not force and not self._token_needs_refresh():
-                return self._token_expires_at
-
-            response = await self._send(
-                "POST",
-                "/internal/plugin-runtime/token/refresh",
-                token=self._runtime_token,
-            )
-
-            if not isinstance(response.data, dict):
-                raise PluginBackendResponseError(
-                    "Invalid Runtime Token refresh response",
-                    status_code=response.status_code,
-                )
-
-            new_token = response.data.get("token")
-
-            if not isinstance(new_token, str) or not new_token:
-                raise PluginBackendResponseError(
-                    "Runtime Token refresh response "
-                    "contains no token",
-                    status_code=response.status_code,
-                )
-
-            generation = response.data.get("generation")
-
-            if generation != self._context.generation:
-                raise PluginBackendAuthenticationError(
-                    "Runtime Token generation mismatch"
-                )
-
-            permissions = response.data.get("permissions")
-
-            if not isinstance(permissions, list):
-                raise PluginBackendResponseError(
-                    "Runtime Token refresh response "
-                    "contains invalid permissions",
-                    status_code=response.status_code,
-                )
-
-            if frozenset(permissions) != self._context.permissions:
-                raise PluginBackendAuthenticationError(
-                    "Plugin permissions changed; "
-                    "runtime restart is required"
-                )
-
-            self._runtime_token = new_token
-            self._token_expires_at = self._read_token_expiry(
-                new_token
-            )
-
-            return self._token_expires_at
-
-    async def request(
-        self,
-        method: str,
-        path: str,
-        *,
-        capability: Capability | str | None = None,
-        json: Any = None,
-        params: Mapping[str, Any] | None = None,
-    ) -> PluginBackendResponse:
-        if capability is not None:
-            self._context.require(capability)
-
-        if path != "/internal/plugin-runtime/token/refresh":
-            await self.refresh_runtime_token()
-
-        return await self._send(
-            method,
-            path,
-            token=self._runtime_token,
-            json=json,
-            params=params,
         )
 
     async def get_runtime_context(
