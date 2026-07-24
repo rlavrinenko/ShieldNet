@@ -7,7 +7,6 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
-    Request,
     status,
 )
 from sqlalchemy import select
@@ -31,53 +30,16 @@ class ActivePluginRuntime:
     installation: GuildPluginInstallation
 
 
-def _set_authenticated_audit_state(
-    request: Request,
-    claims: RuntimeTokenClaims,
-) -> None:
-    """
-    JWT signature and claims were successfully validated.
-
-    From this moment the request is authenticated, even if
-    later checks return 401, 403, 409 or 429.
-    """
-
-    request.state.plugin_audit_authenticated = True
-    request.state.plugin_audit_plugin_key = (
-        claims.plugin_key
-    )
-    request.state.plugin_audit_guild_id = (
-        claims.guild_id
-    )
-    request.state.plugin_audit_generation = (
-        claims.generation
-    )
-    request.state.plugin_audit_token_id = (
-        claims.token_id
-    )
-
-
-def _set_audit_error(
-    request: Request,
-    detail: str,
-) -> None:
-    request.state.plugin_audit_error = detail
-
-
 async def get_plugin_runtime_claims(
-    request: Request,
     authorization: Annotated[
         str | None,
         Header(),
     ] = None,
 ) -> RuntimeTokenClaims:
     if not authorization:
-        detail = "Plugin runtime token is required"
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Plugin runtime token is required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -88,41 +50,23 @@ async def get_plugin_runtime_claims(
         or scheme.lower() != "bearer"
         or not token.strip()
     ):
-        detail = "Invalid Authorization header"
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Invalid Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     try:
-        claims = decode_runtime_token(
-            token.strip()
-        )
+        return decode_runtime_token(token.strip())
     except RuntimeTokenError as exc:
-        detail = str(exc)
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    # ВАЖНО: состояние выставляется сразу после успешной
-    # криптографической проверки токена.
-    _set_authenticated_audit_state(
-        request,
-        claims,
-    )
-
-    return claims
-
 
 async def get_active_plugin_runtime(
-    request: Request,
     claims: Annotated[
         RuntimeTokenClaims,
         Depends(get_plugin_runtime_claims),
@@ -152,32 +96,23 @@ async def get_active_plugin_runtime(
         ).scalar_one_or_none()
 
     if runtime is None:
-        detail = "Plugin runtime has been revoked"
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Plugin runtime has been revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if installation is None:
-        detail = "Plugin installation has been removed"
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Plugin installation has been removed",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if installation.enabled is not True:
-        detail = "Plugin installation is disabled"
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Plugin installation is disabled",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -185,41 +120,32 @@ async def get_active_plugin_runtime(
         "enabled",
         "running",
     }:
-        detail = (
-            "Plugin installation is not active: "
-            f"{installation.status}"
-        )
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail=(
+                "Plugin installation is not active: "
+                f"{installation.status}"
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if runtime.state != "running":
-        detail = (
-            "Plugin runtime is not active: "
-            f"{runtime.state}"
-        )
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail=(
+                "Plugin runtime is not active: "
+                f"{runtime.state}"
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if runtime.generation != claims.generation:
-        detail = (
-            "Plugin runtime token generation "
-            "has been revoked"
-        )
-        _set_audit_error(request, detail)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail=(
+                "Plugin runtime token generation "
+                "has been revoked"
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -234,39 +160,18 @@ def require_runtime_capability(
     capability: str,
 ):
     async def dependency(
-        request: Request,
         active: Annotated[
             ActivePluginRuntime,
             Depends(get_active_plugin_runtime),
         ],
     ) -> RuntimeTokenClaims:
-        # Записываем запрошенную capability до проверки,
-        # чтобы отказ 403 также попал в аудит.
-        request.state.plugin_audit_capability = (
-            capability
-        )
-
         try:
             active.claims.require(capability)
         except RuntimeTokenError as exc:
-            detail = str(exc)
-            _set_audit_error(request, detail)
-
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=detail,
+                detail=str(exc),
             ) from exc
-
-        # Импорт внутри функции исключает циклический импорт.
-        from app.api.dependencies.plugin_rate_limit import (
-            enforce_plugin_rate_limit,
-        )
-
-        await enforce_plugin_rate_limit(
-            request=request,
-            active=active,
-            scope=capability,
-        )
 
         return active.claims
 

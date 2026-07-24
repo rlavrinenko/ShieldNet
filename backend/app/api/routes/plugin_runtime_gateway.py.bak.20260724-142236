@@ -6,22 +6,13 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    Request,
     status,
-)
-
-from app.api.routes.plugin_runtime_audit_route import (
-    PluginRuntimeAuditRoute,
 )
 from sqlalchemy import select
 
 from app.api.dependencies.plugin_runtime import (
-    ActivePluginRuntime,
-    get_active_plugin_runtime,
+    get_plugin_runtime_claims,
     require_runtime_capability,
-)
-from app.api.dependencies.plugin_rate_limit import (
-    enforce_plugin_rate_limit,
 )
 from app.db.session import AsyncSessionFactory
 from app.models.plugins import PluginRuntimeInstance
@@ -34,7 +25,6 @@ from app.plugin_sdk.runtime_tokens import (
 router = APIRouter(
     prefix="/internal/plugin-runtime",
     tags=["Plugin Runtime Gateway"],
-    route_class=PluginRuntimeAuditRoute,
 )
 
 
@@ -70,23 +60,13 @@ def _manifest_permissions(
 
 @router.get("/context")
 async def runtime_context(
-    request: Request,
-    active: Annotated[
-        ActivePluginRuntime,
-        Depends(get_active_plugin_runtime),
+    claims: Annotated[
+        RuntimeTokenClaims,
+        Depends(get_plugin_runtime_claims),
     ],
 ) -> dict:
-    await enforce_plugin_rate_limit(
-        request=request,
-        active=active,
-        scope="runtime.context",
-    )
-
-    claims = active.claims
-
     return {
         "authenticated": True,
-        "active": True,
         "plugin_key": claims.plugin_key,
         "guild_id": claims.guild_id,
         "generation": claims.generation,
@@ -94,29 +74,16 @@ async def runtime_context(
         "token_id": claims.token_id,
         "issued_at": claims.issued_at,
         "expires_at": claims.expires_at,
-        "runtime_state": active.runtime.state,
-        "installation_status": (
-            active.installation.status
-        ),
     }
 
 
 @router.post("/token/refresh")
 async def refresh_runtime_token(
-    request: Request,
-    active: Annotated[
-        ActivePluginRuntime,
-        Depends(get_active_plugin_runtime),
+    claims: Annotated[
+        RuntimeTokenClaims,
+        Depends(get_plugin_runtime_claims),
     ],
 ) -> dict:
-    await enforce_plugin_rate_limit(
-        request=request,
-        active=active,
-        scope="runtime.token.refresh",
-    )
-
-    claims = active.claims
-
     async with AsyncSessionFactory() as session:
         runtime = (
             await session.execute(
