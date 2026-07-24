@@ -1,6 +1,6 @@
 from app.plugin_sdk import (
-    Capability,
     CapabilityDenied,
+    PluginBackendError,
     PluginContext,
 )
 
@@ -8,18 +8,41 @@ from app.plugin_sdk import (
 async def setup(context: PluginContext):
     print("Plugin context:", context.public_info())
 
+    backend_context = await context.backend.get_runtime_context()
+
+    print(
+        "Backend authenticated plugin:",
+        backend_context["plugin_key"],
+    )
+
+    print(
+        "Backend authenticated guild:",
+        backend_context["guild_id"],
+    )
+
     try:
-        context.require(
-            Capability.DISCORD_SEND_MESSAGE
-        )
+        runtime_result = await context.backend.runtime_read()
     except CapabilityDenied as exc:
-        print("Expected permission denial:", exc)
+        print("runtime.read denied locally:", exc)
+    else:
+        print("runtime.read result:", runtime_result)
+
+    try:
+        await context.backend.test_send_message()
+    except CapabilityDenied as exc:
+        print(
+            "discord.send.message denied locally:",
+            exc,
+        )
+    except PluginBackendError as exc:
+        print(
+            "discord.send.message denied by Backend:",
+            exc,
+        )
 
     return {
         "status": "ready",
-        "guild_id": context.guild_id,
-        "plugin_key": context.plugin_key,
-        "permissions": sorted(context.permissions),
+        "backend_authenticated": True,
     }
 
 

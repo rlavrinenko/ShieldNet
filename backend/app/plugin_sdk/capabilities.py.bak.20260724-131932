@@ -133,18 +133,6 @@ class PluginContext:
             guild_id=self.guild_id,
         )
 
-    @property
-    def backend(self):
-        """
-        Create a ShieldNet Backend SDK client bound to this
-        plugin, guild, generation and Runtime Token.
-        """
-        from app.plugin_sdk.backend_client import (
-            PluginBackendClient,
-        )
-
-        return PluginBackendClient(context=self)
-
     def public_info(self) -> dict[str, Any]:
         return {
             "guild_id": self.guild_id,
